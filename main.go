@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -19,10 +20,16 @@ import (
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+
+	devPtr := flag.Bool("dev", false, "Should RoleCall run in dev mode?")
+
+	if *devPtr {
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal("Error loading .env file")
+		}
 	}
+
 	var token = os.Getenv("TOKEN")
 	if token == "" {
 		log.Panic("NO TOKEN PROVIDED!")
