@@ -496,6 +496,9 @@ If you want to cancel, press the cancel button, this will automatically remove t
 
 			for i, comp := range *row {
 				button := *comp.(*discord.ButtonComponent)
+				if button.CustomID == "editnewcancel" {
+					continue
+				}
 				newRow[i] = &discord.ButtonComponent{
 					Label:    button.Label,
 					CustomID: discord.ComponentID("gib_" + strings.Split(string(button.CustomID), "_")[1]),
