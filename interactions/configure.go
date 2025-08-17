@@ -489,10 +489,10 @@ If you want to cancel, press the cancel button, this will automatically remove t
 			components := make(discord.ContainerComponents, 1)
 
 			row, _ := e.Message.Components[1].(*discord.ActionRowComponent)
-			newRow := make(discord.ActionRowComponent, len(*row))
+			newRow := make(discord.ActionRowComponent, len(*row)-1)
 
 			//used later for updating each button in the DB with the final
-			buttons := make([]discord.ButtonComponent, len(*row))
+			buttons := make([]discord.ButtonComponent, len(*row)-1)
 
 			for i, comp := range *row {
 				button := *comp.(*discord.ButtonComponent)
