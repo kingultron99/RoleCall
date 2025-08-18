@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -21,9 +20,7 @@ import (
 
 func main() {
 
-	devPtr := flag.Bool("dev", false, "Should RoleCall run in dev mode?")
-
-	if *devPtr {
+	if *core.DevPtr {
 		err := godotenv.Load()
 		if err != nil {
 			log.Fatal("Error loading .env file")

@@ -3,6 +3,7 @@ package events
 import (
 	"database/sql"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/diamondburned/arikawa/v3/api"
@@ -19,8 +20,6 @@ func AddJoinHandler() {
 		if err != nil {
 			log.Print("Failed to insert guild into DB!")
 		}
-
-		RegisterCommands(e.AppID, e.Guild.ID)
 	})
 
 	// Listen for user joins.
@@ -102,11 +101,23 @@ func RegisterCommands(appID discord.AppID, guildID discord.GuildID) {
 			commands = append(commands, *command.CreateCommandData)
 		}
 	}
-	_, err := core.State.BulkOverwriteGuildCommands(appID, guildID, commands)
-	if err != nil {
-		log.Printf("Failed to overwrite commands in %v with err: %v", guildID, err)
+
+	// Register commands as guild commands for testing
+	if *core.DevPtr && guildID.String() == os.Getenv("Testing_Guild") {
+		_, err := core.State.BulkOverwriteGuildCommands(appID, guildID, commands)
+		if err != nil {
+			log.Printf("Failed to overwrite commands in %v with err: %v", guildID, err)
+		}
+		log.Print("Commands registered to guilds")
+		return
 	}
-	log.Print("Commands registered to guilds")
+
+	_, err := core.State.BulkOverwriteCommands(appID, commands)
+	if err != nil {
+		log.Printf("Failed to overwrite commands with err: %v", err)
+	}
+	log.Print("Commands registered globally")
+
 }
 
 func CommandRouter() {
