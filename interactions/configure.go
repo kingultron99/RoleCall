@@ -289,7 +289,12 @@ If you want to cancel, press the cancel button, this will automatically remove t
 	MapModalComponents["rename"] = ModalComponent{
 		Run: func(e *gateway.InteractionCreateEvent, data *discord.ModalInteraction) {
 			label := data.Components.Find("content").(*discord.TextInputComponent).Value
-			password, _ := utils.HashPassword(data.Components.Find("password").(*discord.TextInputComponent).Value)
+			var password = ""
+
+			if data.Components.Find("password").(*discord.TextInputComponent).Value != "" {
+				password, _ = utils.HashPassword(data.Components.Find("password").(*discord.TextInputComponent).Value)
+			}
+
 			id := strings.Split(string(data.CustomID), "_")[1]
 
 			var newComponents = make(discord.ContainerComponents, 2)

@@ -117,7 +117,6 @@ func RegisterCommands(appID discord.AppID, guildID discord.GuildID) {
 		log.Printf("Failed to overwrite commands with err: %v", err)
 	}
 	log.Print("Commands registered globally")
-
 }
 
 func CommandRouter() {
