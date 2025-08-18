@@ -444,7 +444,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 					Embeds: &[]discord.Embed{
 						{
 							Title:       "Last step!",
-							Description: "Select the channel you want the final message to be sent\n\nPlease do **not** dismiss this message, this will leave residual entries in the database! If you want to cancel, press the cancel button, this will automatically remove those entries.",
+							Description: "Select the channel you want the final message to be sent\n\n## Make sure RoleCall has permission to send messages in the target channel BEFORE selecting it!\n\nPlease do **not** dismiss this message, this will leave residual entries in the database! If you want to cancel, press the cancel button, this will automatically remove those entries.",
 							Color:       utils.Purple,
 						},
 					},
