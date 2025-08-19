@@ -13,8 +13,6 @@ import (
 	"kingultron99.com/RoleCall/utils"
 )
 
-// TODO: Delete provider
-
 func init() {
 	MapCommands["configure"] = Command{
 		CreateCommandData: &api.CreateCommandData{
@@ -127,7 +125,6 @@ You can change this role at any time just by running this command again!`,
 					},
 				})
 			}
-
 		},
 	}
 	MapRoleComponents["roles"] = RoleSelectComponent{
@@ -395,7 +392,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 					Embeds: &[]discord.Embed{
 						{
 							Title:       "Setup cancelled!",
-							Description: "We've removed all preliminary DB entries related to this setup.\n\nIf you want to restart the setup, simply run `/new_role_provider`\n-# You can safely dismiss this message now!",
+							Description: "We've removed all preliminary DB entries related to this setup.\n\nIf you want to restart the setup, simply run `/configure provider`\n-# You can safely dismiss this message now!",
 							Color:       utils.Green,
 						},
 					},
