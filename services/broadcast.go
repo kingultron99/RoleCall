@@ -103,6 +103,7 @@ func BroadcastMessage(ctx context.Context, messages []BroadCastMessage) []Broadc
 						Text: author.Username + " authored this broadcast!",
 						Icon: author.AvatarURL(),
 					},
+					Timestamp: discord.NowTimestamp(),
 				})
 			}
 
