@@ -17,8 +17,13 @@ import (
 func AddJoinHandler() {
 	core.State.AddHandler(func(e *gateway.GuildCreateEvent) {
 		_, err := core.DB.Exec("INSERT INTO guilds(guild_id) VALUES($1)", e.ID)
+		log.Println(err)
 		if err != nil {
 			log.Print("Failed to insert guild into DB!")
+		}
+		_, err = core.DB.Exec("INSERT INTO broadcast_preferences(guild_id) VALUES($1)", e.ID)
+		if err != nil {
+			log.Print("Failed to set guild preferences!")
 		}
 	})
 
@@ -26,19 +31,19 @@ func AddJoinHandler() {
 	// if they are joining a server with member screening isPending will = true
 	// add them to the pending table. Otherwise, assign the role.
 	core.State.AddHandler(func(e *gateway.GuildMemberAddEvent) {
-		row := core.DB.QueryRow("SELECT role_id FROM autoroles WHERE guild_id=$1", e.GuildID.String())
-		var role string
+		row := core.DB.QueryRow("SELECT role_id FROM autoroles WHERE guild_id=$1", e.GuildID)
+		var role discord.Snowflake
 		noRole := row.Scan(&role)
 		if noRole == sql.ErrNoRows {
 			return
 		}
 
 		if e.IsPending {
-			core.DB.Exec("INSERT INTO pending_users(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", e.GuildID.String(), e.User.ID.String())
+			core.DB.Exec("INSERT INTO pending_users(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", e.GuildID, e.User.ID)
 			return
 		}
 
-		err := core.State.AddRole(e.GuildID, e.User.ID, discord.RoleID(utils.MustSnowflakeEnv(role)), api.AddRoleData{})
+		err := core.State.AddRole(e.GuildID, e.User.ID, discord.RoleID(role), api.AddRoleData{})
 		if err != nil {
 			log.Print(err)
 		}
@@ -47,14 +52,14 @@ func AddJoinHandler() {
 	// Wait for user updates and check if the user finished
 	// the screening (isPending becomes false), and assign role
 	core.State.AddHandler(func(e *gateway.GuildMemberUpdateEvent) {
-		userRow := core.DB.QueryRow("SELECT user_id FROM pending_users WHERE guild_id=$1", e.GuildID.String())
+		userRow := core.DB.QueryRow("SELECT user_id FROM pending_users WHERE guild_id=$1", e.GuildID)
 		var user string
 		err := userRow.Scan(&user)
 		if err == sql.ErrNoRows {
 			return
 		}
 
-		roleRow := core.DB.QueryRow("SELECT role_id FROM autoroles WHERE guild_id=$1", e.GuildID.String())
+		roleRow := core.DB.QueryRow("SELECT role_id FROM autoroles WHERE guild_id=$1", e.GuildID)
 		var role string
 		noRole := roleRow.Scan(&role)
 		// This technically shouldnt happen, as the user shouldnt be added to the pending list if the server doesnt have their default role configured
@@ -67,20 +72,20 @@ func AddJoinHandler() {
 			if err != nil {
 				log.Print(err)
 			}
-			core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1 AND user_id=$2", e.GuildID.String(), e.User.ID.String())
+			core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1 AND user_id=$2", e.GuildID, e.User.ID)
 		}
 	})
 
 	// Remove the user from the pending list if they leave
 	// before completing the server screening
 	core.State.AddHandler(func(e *gateway.GuildMemberRemoveEvent) {
-		userRow := core.DB.QueryRow("SELECT user_id FROM pending_users WHERE guild_id=$1", e.GuildID.String())
+		userRow := core.DB.QueryRow("SELECT user_id FROM pending_users WHERE guild_id=$1", e.GuildID)
 		var user string
 		err := userRow.Scan(&user)
 		if err == sql.ErrNoRows {
 			return
 		}
-		core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1 AND user_id=$2", e.GuildID.String(), e.User.ID.String())
+		core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1 AND user_id=$2", e.GuildID, e.User.ID)
 	})
 
 	core.State.AddHandler(func(e *gateway.GuildDeleteEvent) {
@@ -88,11 +93,11 @@ func AddJoinHandler() {
 		if e.Unavailable {
 			return
 		}
-		core.DB.Exec("DELETE FROM guilds WHERE guild_id=$1", e.ID.String())
+		core.DB.Exec("DELETE FROM guilds WHERE guild_id=$1", e.ID)
 	})
 }
 
-func RegisterCommands(appID discord.AppID, guildID discord.GuildID) {
+func RegisterCommands(appID discord.AppID) {
 
 	var commands []api.CreateCommandData
 
@@ -103,18 +108,19 @@ func RegisterCommands(appID discord.AppID, guildID discord.GuildID) {
 	}
 
 	// Register commands as guild commands for testing
-	if *core.DevPtr && guildID.String() == os.Getenv("Testing_Guild") {
+	if *core.DevPtr {
+		guildID := discord.GuildID(utils.MustSnowflakeEnv(os.Getenv("TESTING_GUILD")))
 		_, err := core.State.BulkOverwriteGuildCommands(appID, guildID, commands)
 		if err != nil {
-			log.Printf("Failed to overwrite commands in %v with err: %v", guildID, err)
+			log.Fatalf("Failed to overwrite commands in %v with err: %v", guildID, err)
 		}
-		log.Print("Commands registered to guilds")
+		log.Print("Commands registered to test guild")
 		return
 	}
 
 	_, err := core.State.BulkOverwriteCommands(appID, commands)
 	if err != nil {
-		log.Printf("Failed to overwrite commands with err: %v", err)
+		log.Fatalf("Failed to overwrite commands with err: %v", err)
 	}
 	log.Print("Commands registered globally")
 }

@@ -11,6 +11,7 @@ var (
 	Purple discord.Color = 0x6C38C7
 	Green  discord.Color = 0x27EA6B
 	Red    discord.Color = 0xFF0000
+	Blue   discord.Color = 0x0096FF
 )
 
 // Converts a string into a usable discord snowflake

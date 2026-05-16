@@ -30,6 +30,45 @@ func init() {
 					OptionName:  "autorole",
 					Description: "Configure a default role that all new members will be given",
 				},
+				&discord.SubcommandGroupOption{
+					OptionName:  "broadcasts",
+					Description: "Confifgure broadcast messages from RoleCall",
+					Subcommands: []*discord.SubcommandOption{
+						{
+							OptionName:  "system",
+							Description: "Toggle system status messages for when RoleCall is having issues or is undergoing maintenance",
+							Options: []discord.CommandOptionValue{
+								&discord.BooleanOption{
+									OptionName:  "enabled",
+									Description: "Whether or not to receive system notice messages from RoleCall",
+									Required:    true,
+								},
+							},
+						},
+						{
+							OptionName:  "updates",
+							Description: "Toggle update messages that report when RoleCall has new features or improvements",
+							Options: []discord.CommandOptionValue{
+								&discord.BooleanOption{
+									OptionName:  "enabled",
+									Description: "Whether or not to receive update messages from RoleCall",
+									Required:    true,
+								},
+							},
+						},
+						{
+							OptionName:  "location",
+							Description: "Configure where you receive these messages",
+							Options: []discord.CommandOptionValue{
+								&discord.ChannelOption{
+									OptionName:  "channel",
+									Description: "The target channel for RoleCall's broadcast messages",
+									Required:    true,
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 		Run: func(e *gateway.InteractionCreateEvent, data *discord.CommandInteraction) {
@@ -45,7 +84,7 @@ func init() {
 Just remember, RoleCall cannot give anyone the <@&` + mem.RoleIDs[0].String() + `> role or higher!`,
 					Color: utils.Purple,
 				}
-				row := core.DB.QueryRow("SELECT * FROM interaction_messages WHERE guild_id=$1", e.GuildID.String())
+				row := core.DB.QueryRow("SELECT * FROM interaction_messages WHERE guild_id=$1", e.GuildID)
 				err := row.Scan()
 
 				if err == sql.ErrNoRows {
@@ -92,7 +131,7 @@ RoleCall cannot give anyone the <@&` + mem.RoleIDs[0].String() + `> role or high
 					Color: utils.Purple,
 				}
 
-				row := core.DB.QueryRow("SELECT * FROM autoroles WHERE guild_id=$1", e.GuildID.String())
+				row := core.DB.QueryRow("SELECT * FROM autoroles WHERE guild_id=$1", e.GuildID)
 				err := row.Scan()
 
 				if err == sql.ErrNoRows {
@@ -124,6 +163,94 @@ You can change this role at any time just by running this command again!`,
 						},
 					},
 				})
+			case "broadcasts":
+				switch data.Options[0].Options[0].Name {
+				case "system":
+					enabled, _ := data.Options[0].Options[0].Options[0].BoolValue()
+					_, err := core.DB.Exec("UPDATE broadcast_preferences SET system=$1 WHERE guild_id=$2", enabled, e.GuildID)
+					if err != nil {
+						log.Println(err)
+						core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
+							Type: api.MessageInteractionWithSource,
+							Data: &api.InteractionResponseData{
+								Flags: discord.EphemeralMessage,
+								Embeds: &[]discord.Embed{
+									{
+										Color:       utils.Red,
+										Title:       "Something went wrong!!",
+										Description: "Your preferences failed to update. Please try again later, and if this problem persists, please join the support server and let us know!",
+									},
+								},
+							},
+						})
+					}
+
+					var messageType string
+					if enabled {
+						messageType = "Starting now, you'll receive system notices from RoleCall!"
+					} else {
+						messageType = "You'll no longer receive system notices from RoleCall. If you change your mind, you can re-enable them with the `/configure broadcasts` command!"
+					}
+
+					core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
+						Type: api.MessageInteractionWithSource,
+						Data: &api.InteractionResponseData{
+							Flags: discord.EphemeralMessage,
+							Embeds: &[]discord.Embed{
+								{
+									Color:       utils.Green,
+									Title:       "All set!",
+									Description: "Your preferences been updated successfully!\n\n" + messageType,
+								},
+							},
+						},
+					})
+				case "updates":
+					enabled, _ := data.Options[0].Options[0].Options[0].BoolValue()
+					core.DB.Exec("UPDATE broadcast_preferences SET updates=$1 WHERE guild_id=$2", enabled, e.GuildID)
+
+					var messageType string
+					if enabled {
+						messageType = "Starting now, you'll receive update messages from RoleCall!"
+					} else {
+						messageType = "You will no longer receive update messages from RoleCall. If you change your mind, you can re-enable them with the `/configure broadcasts` command!"
+					}
+
+					core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
+						Type: api.MessageInteractionWithSource,
+						Data: &api.InteractionResponseData{
+							Flags: discord.EphemeralMessage,
+							Embeds: &[]discord.Embed{
+								{
+									Title:       "All set!",
+									Description: "Your preferences been updated successfully!\n\n" + messageType,
+								},
+							},
+						},
+					})
+				case "location":
+					channelID := data.Options[0].Options[0].Options[0].Value.String()
+					channelID = strings.Trim(channelID, "\"")
+
+					_, err := core.DB.Exec("UPDATE broadcast_preferences SET location=$1 WHERE guild_id=$2", utils.MustSnowflakeEnv(channelID), e.GuildID)
+					if err != nil {
+						log.Println(err)
+					}
+
+					core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
+						Type: api.MessageInteractionWithSource,
+						Data: &api.InteractionResponseData{
+							Flags: discord.EphemeralMessage,
+							Embeds: &[]discord.Embed{
+								{
+									Title:       "Your preferences been updated successfully!",
+									Description: "From now on, all broadcast messages from RoleCall will be sent in <#" + channelID + ">!\n\n**Please Make sure that RoleCall has permission to __view__ and __send messages__ the target channel!**",
+									Color:       utils.Green,
+								},
+							},
+						},
+					})
+				}
 			}
 		},
 	}
@@ -192,7 +319,7 @@ You can change this role at any time just by running this command again!`,
 					Label:    label,
 				}
 
-				row := core.DB.QueryRow("SELECT role_id FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID.String(), role.String())
+				row := core.DB.QueryRow("SELECT role_id FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID, role)
 
 				var existing InteractionRole
 
@@ -214,7 +341,7 @@ You can change this role at any time just by running this command again!`,
 
 			// Finally dump the result into the DB
 			for _, role := range roles {
-				core.DB.Exec("INSERT INTO interaction_roles(guild_id,role_id) VALUES ($1,$2)", e.GuildID.String(), role.String())
+				core.DB.Exec("INSERT INTO interaction_roles(guild_id,role_id) VALUES ($1,$2)", e.GuildID, role)
 			}
 
 			comp = append(comp, &buttonRow)
@@ -315,7 +442,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 				newComponents[i] = &newRow
 			}
 
-			core.DB.Exec("UPDATE interaction_roles SET  password=$1 WHERE role_id=$2 AND guild_id = $3", password, id, e.GuildID.String())
+			core.DB.Exec("UPDATE interaction_roles SET  password=$1 WHERE role_id=$2 AND guild_id = $3", password, id, e.GuildID)
 
 			core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
 				Type: api.UpdateMessage,
@@ -371,7 +498,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 	MapButtonComponents["editnewcancel"] = ButtonComponent{
 		Run: func(e *gateway.InteractionCreateEvent, data *discord.ButtonInteraction) {
 
-			rows, _ := core.DB.Query("SELECT role_id FROM interaction_roles WHERE guild_id=$1", e.GuildID.String())
+			rows, _ := core.DB.Query("SELECT role_id FROM interaction_roles WHERE guild_id=$1", e.GuildID)
 			for rows.Next() {
 				var row InteractionRole
 				rows.Scan(&row.RoleID)
@@ -379,7 +506,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 				comp := e.Message.Components.Find(discord.ComponentID("rename_" + row.RoleID))
 
 				if comp != nil {
-					core.DB.Exec("DELETE FROM interaction_roles WHERE role_id=$1 AND guild_id=$2", row.RoleID, e.GuildID.String())
+					core.DB.Exec("DELETE FROM interaction_roles WHERE role_id=$1 AND guild_id=$2", row.RoleID, e.GuildID)
 				}
 
 			}
@@ -539,13 +666,13 @@ If you want to cancel, press the cancel button, this will automatically remove t
 				return
 			}
 
-			ret := core.DB.QueryRow("INSERT INTO interaction_messages(guild_id, channel_id, message_id) VALUES ($1,$2,$3) RETURNING id", e.GuildID.String(), msg.ChannelID.String(), msg.ID.String())
+			ret := core.DB.QueryRow("INSERT INTO interaction_messages(guild_id, channel_id, message_id) VALUES ($1,$2,$3) RETURNING id", e.GuildID, msg.ChannelID, msg.ID)
 
 			var res InteractionMsg
 			ret.Scan(&res.ID)
 
 			for _, button := range buttons {
-				core.DB.Exec("UPDATE interaction_roles SET interaction_msg_id=$1 WHERE guild_id=$2 AND role_id=$3", res.ID, e.GuildID.String(), strings.Split(string(button.CustomID), "_")[1])
+				core.DB.Exec("UPDATE interaction_roles SET interaction_msg_id=$1 WHERE guild_id=$2 AND role_id=$3", res.ID, e.GuildID, strings.Split(string(button.CustomID), "_")[1])
 			}
 
 			core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
@@ -597,7 +724,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 				return
 			}
 
-			row := core.DB.QueryRow("SELECT password FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID.String(), target)
+			row := core.DB.QueryRow("SELECT password FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID, target)
 
 			var role InteractionRole
 			row.Scan(&role.Password)
@@ -652,7 +779,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 					},
 				},
 			})
-			core.DB.Exec("UPDATE interaction_roles SET uses=uses+1 WHERE guild_id=$1 AND role_id=$2", e.GuildID.String(), target)
+			core.DB.Exec("UPDATE interaction_roles SET uses=uses+1 WHERE guild_id=$1 AND role_id=$2", e.GuildID, target)
 		},
 	}
 	MapModalComponents["gib"] = ModalComponent{
@@ -660,7 +787,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 			target := strings.Split(string(data.CustomID), "_")[1]
 			input := data.Components.Find("password").(*discord.TextInputComponent).Value
 
-			row := core.DB.QueryRow("SELECT password FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID.String(), target)
+			row := core.DB.QueryRow("SELECT password FROM interaction_roles WHERE guild_id=$1 AND role_id=$2", e.GuildID, target)
 
 			var entry InteractionRole
 			row.Scan(&entry.Password)
@@ -696,7 +823,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 					},
 				},
 			})
-			core.DB.Exec("UPDATE interaction_roles SET uses=uses+1 WHERE guild_id=$1 AND role_id=$2", e.GuildID.String(), target)
+			core.DB.Exec("UPDATE interaction_roles SET uses=uses+1 WHERE guild_id=$1 AND role_id=$2", e.GuildID, target)
 		},
 	}
 
@@ -705,7 +832,7 @@ If you want to cancel, press the cancel button, this will automatically remove t
 		Run: func(e *gateway.InteractionCreateEvent, data *discord.RoleSelectInteraction) {
 			target := data.Values[0]
 
-			core.DB.Exec("INSERT INTO autoroles (guild_id, role_id) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET role_id=EXCLUDED.role_id", e.GuildID.String(), target.String())
+			core.DB.Exec("INSERT INTO autoroles (guild_id, role_id) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET role_id=EXCLUDED.role_id", e.GuildID, target)
 
 			core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
 				Type: api.UpdateMessage,

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"kingultron99.com/RoleCall/api"
 	"kingultron99.com/RoleCall/core"
 	"kingultron99.com/RoleCall/events"
 	"kingultron99.com/RoleCall/utils"
@@ -19,6 +21,7 @@ import (
 )
 
 func main() {
+	flag.Parse()
 
 	if *core.DevPtr {
 		err := godotenv.Load()
@@ -67,15 +70,22 @@ func main() {
 
 		shardNum++
 
-		for _, guild := range getGuilds {
-			go func() {
-				events.RegisterCommands(discord.AppID(utils.MustSnowflakeEnv(os.Getenv("APP_ID"))), guild.ID)
-			}()
-		}
+		events.RegisterCommands(discord.AppID(utils.MustSnowflakeEnv(os.Getenv("APP_ID"))))
 	})
 
 	events.AddJoinHandler()
 	events.CommandRouter()
+
+	if _, err := os.Stat(os.Getenv("KEY_DIR") + "/private_key.pem"); os.IsNotExist(err) {
+		err = utils.GenerateKeyPair()
+		if err != nil {
+			log.Fatal("failed to generate key pair:", err)
+		}
+	}
+
+	go func() {
+		api.StartApi()
+	}()
 
 	go func() {
 		var c = make(chan os.Signal, 1)

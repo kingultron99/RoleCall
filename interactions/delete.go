@@ -33,6 +33,10 @@ func init() {
 					OptionName:  "leftovers",
 					Description: "Deletes any entries that may have been left over from a misconfigured role provider",
 				},
+				&discord.SubcommandOption{
+					OptionName:  "comms",
+					Description: "Resets your broadcast preferences to default",
+				},
 			},
 			DefaultMemberPermissions: discord.NewPermissions(discord.PermissionAdministrator),
 		},
@@ -51,8 +55,10 @@ Your guild ID will remain saved until RoleCall is removed from the guild
 Any messages sent by RoleCall will also be deleted.
 								
 This will not affect any of your roles, and any users who have given themselves roles via RoleCall will continue to have those roles.
-								
+
 This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCall is removed from your server.
+
+This will also set also set your broadcast preferences back to default (i.e. all messages enabled, and no custom channel selected)
 								
 ### This is your only warning. Choose carefully.`,
 								Color: utils.Red,
@@ -75,7 +81,7 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 					},
 				})
 			case "providers":
-				messages, _ := core.DB.Query("SELECT id, channel_id FROM interaction_messages WHERE guild_id=$1", e.GuildID.String())
+				messages, _ := core.DB.Query("SELECT id, channel_id FROM interaction_messages WHERE guild_id=$1", e.GuildID)
 
 				options := []discord.SelectOption{}
 
@@ -143,7 +149,7 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 					},
 				})
 			case "autorole":
-				core.DB.Exec("DELETE FROM autoroles WHERE guild_id=$1", e.GuildID.String())
+				core.DB.Exec("DELETE FROM autoroles WHERE guild_id=$1", e.GuildID)
 				core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
 					Type: api.MessageInteractionWithSource,
 					Data: &api.InteractionResponseData{
@@ -174,6 +180,22 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 						Components: &discord.ContainerComponents{},
 					},
 				})
+			case "comms":
+				core.DB.Exec("UPDATE broadcast_preferences SET system=true, updates=true, location=NULL WHERE guild_id=$1;", e.GuildID)
+				core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
+					Type: api.MessageInteractionWithSource,
+					Data: &api.InteractionResponseData{
+						Flags: discord.EphemeralMessage,
+						Embeds: &[]discord.Embed{
+							{
+								Title:       "Broadcast preferences reset",
+								Description: "We've reset your broadcast preferences to default (i.e. all messages enabled, and no custom channel selected)!",
+								Color:       utils.Green,
+							},
+						},
+						Components: &discord.ContainerComponents{},
+					},
+				})
 			}
 		},
 	}
@@ -198,7 +220,7 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 	MapButtonComponents["deleteall"] = ButtonComponent{
 		Run: func(e *gateway.InteractionCreateEvent, data *discord.ButtonInteraction) {
 
-			rows, _ := core.DB.Query("SELECT message_id, channel_id FROM interaction_messages WHERE guild_id=$1", e.GuildID.String())
+			rows, _ := core.DB.Query("SELECT message_id, channel_id FROM interaction_messages WHERE guild_id=$1", e.GuildID)
 
 			for rows.Next() {
 				var provider InteractionMsg
@@ -208,11 +230,12 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 
 			// Delete related records
 			// Deleting from interaction_messages will cascade to interaction_roles (i.e. deleting an interaction_message will delete all associated interaction_roles)
-			core.DB.Exec("DELETE FROM interaction_messages WHERE guild_id=$1;", e.GuildID.String())
+			core.DB.Exec("DELETE FROM interaction_messages WHERE guild_id=$1;", e.GuildID)
 			// However, I fully expect people not to read warnings, and will leave orphaned entries in interaction_roles without a message
-			core.DB.Exec("DELETE FROM interaction_roles WHERE guild_id=$1;", e.GuildID.String())
-			core.DB.Exec("DELETE FROM autoroles WHERE guild_id=$1;", e.GuildID.String())
-			core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1;", e.GuildID.String())
+			core.DB.Exec("DELETE FROM interaction_roles WHERE guild_id=$1;", e.GuildID)
+			core.DB.Exec("DELETE FROM autoroles WHERE guild_id=$1;", e.GuildID)
+			core.DB.Exec("DELETE FROM pending_users WHERE guild_id=$1;", e.GuildID)
+			core.DB.Exec("UPDATE broadcast_preferences SET system=true, updates=true, location=NULL WHERE guild_id=$1;", e.GuildID)
 
 			core.State.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
 				Type: api.UpdateMessage,
@@ -261,7 +284,7 @@ This will *not* remove your guilds entry from RoleCalls guild list, UNTIL RoleCa
 					Embeds: &[]discord.Embed{
 						{
 							Title:       "Purge complete",
-							Description: "We've deleted all recorded configurations and associated messages.",
+							Description: "We've deleted all recorded configurations and associated messages.\n\nYour broadcast preferences have been reset to default.",
 							Color:       utils.Green,
 						},
 					},
